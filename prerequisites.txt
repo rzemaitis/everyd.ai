@@ -1,0 +1,5 @@
+pip install opencv-python
+pip install numpy
+pip install cmake
+pip install dlib #Install Visual Studio for C++ with Clib for dlib to install
+pip install scipy
