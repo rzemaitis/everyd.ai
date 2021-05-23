@@ -133,3 +133,9 @@ dmypy.json
 .idea/modules.xml
 .idea/everyd.ai.iml
 .idea
+
+# Project-specific
+config/dev/
+config/original/
+salvageFormat_mine.py
+shape_predictor_68_face_landmarks.dat

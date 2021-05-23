@@ -1,0 +1,14 @@
+#Main parameters
+template = C:/Users/user/Pictures/everyday/1970-05-27_12:53:28.jpg
+imgdir = C:/Users/user/Pictures/everyday/
+moviedir = C:/Users/user/Pictures/everyday/movie/
+
+#Optional parameters
+extension = .jpg
+oriented = True
+datestart = 1971-05-27
+datefinish = 1971-05-27
+dimfile = None
+width = None
+height = None
+cores = 1

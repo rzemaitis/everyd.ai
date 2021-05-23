@@ -1,0 +1,11 @@
+#Main parameters
+imgdir = C:/Users/user/Pictures/everyday/
+reviewdir = C:/Users/user/Pictures/everyday/review/
+datestart = 1971-05-27
+datefinish = 1971-05-27
+
+#Optional parameters
+sleepstart = 3
+sleepfinish = 7
+puttemplate = True
+extension = .jpg

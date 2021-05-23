@@ -1,0 +1,8 @@
+#Main parameters
+template = C:/Users/user/Pictures/everyday/1970-05-27_12:53:28.jpg
+reviewdir =C:/Users/user/Pictures/everyday/review/
+
+#Optional parameters
+dimfile = C:/Users/user/Pictures/everyday/1971-05-27_12:53:28.jpg
+width = None
+height = None

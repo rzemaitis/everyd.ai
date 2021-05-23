@@ -1,0 +1,5 @@
+cmake==3.18.4.post1
+dlib==19.22.0 #Install Visual Studio for C++ with Clib for dlib to install
+numpy==1.20.3
+opencv-python==4.5.2.52
+scipy==1.6.3
