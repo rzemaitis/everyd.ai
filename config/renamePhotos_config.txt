@@ -1,5 +1,0 @@
-#Main parameters
-imgdir = C:/Users/user/Pictures/everyday/
-
-#Optional parameters
-extension=.jpg
