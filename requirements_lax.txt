@@ -1,0 +1,6 @@
+cmake
+dlib #Install Visual Studio for C++ with Clib for dlib to install
+numpy
+opencv-python
+Pillow
+scipy
