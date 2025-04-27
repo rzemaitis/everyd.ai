@@ -1,3 +1,6 @@
+# Catch-all for hidden files and directories
+.*
+
 # Environments
 venv*
 .vscode
