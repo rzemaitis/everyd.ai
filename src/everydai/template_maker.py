@@ -1,34 +1,38 @@
-
-import glob, sys
-import numpy as np
 import cv2
-import utilities as util
+import numpy as np
+import sys
 
-def main(template,reviewdir,dimfile=None,width=None,height=None):
-    template= template.replace('\\', '/')
+import src.everydai.utils.utils as util
+
+# TODO: I think the template rescaling should be done on a picture-by-picture basis, after all,
+# we're not saving pictures here, just the dimensions?
+
+
+def main(template, reviewdir, dimfile=None, width=None, height=None):
+    template = template.replace('\\', '/')
     img_temp = cv2.imread(template)
+    if img_temp is None:
+        print('Template image not found in', template)
+        sys.exit()
+
     # Initialise dimensions
     if dimfile is not None:
-        try:
-            dim = cv2.imread(dimfile).shape[:2]
-        except:
-            print('Dimension image not found in',dimfile)
+        img_dim = cv2.imread(dimfile)
+        if img_dim is None:
+            print('Dimension image not found in', dimfile)
             sys.exit()
+        dim = img_dim.shape[:2]
     # Supplied dimensions
     elif width is not None and height is not None:
-        dim=(height,width)
-    #No dimesnions supplied: use the template image
+        dim = (height, width)
+    # No dimesnions supplied: use the template image
     else:
-        try:
-            dim = img_temp.shape[:2]
-        except:
-            print('Template image not found in',img_temp)
-            sys.exit()
+        dim = img_temp.shape[:2]
 
     # Rescale to given dimensions
-    img_temp = util.rescale(img_temp,dim)
-    detector, predictor = util.initDetectors()
-    points_temp = util.findFace(img_temp, detector, predictor)
+    img_temp = util.rescale(img_temp, dim)
+    detector, predictor = util.init_face_detectors()
+    points_temp = util.detect_face(img_temp, detector, predictor)
     # debug=False
     # if debug:
     #     for p in points_temp:
@@ -37,15 +41,16 @@ def main(template,reviewdir,dimfile=None,width=None,height=None):
     #         cv2.imwrite(reviewdir + template.split('/')[-1], img_temp)
     #     sys.exit()
 
-    np.savetxt(reviewdir+'template_'+str(dim[1])+'x'+str(dim[0])+'.txt', points_temp.astype(int))
+    np.savetxt(reviewdir + 'template_' + str(dim[1]) + 'x' + str(dim[0]) + '.txt', points_temp.astype(int))
     print('Template created successfully!')
+
 
 if __name__ == "__main__":
     # Modifications to config formats
     reformat = {}
-    reformat['int']=['width','height']
+    reformat['int'] = ['width', 'height']
     reformat['addslash'] = ['reviewdir']
     # Read in config file
-    config = util.readConfig('./config/templateMaker_config.txt', reformat=reformat)
+    config = util.readconfig('./config/templateMaker_config.txt', reformat=reformat)
 
     main(**config)
