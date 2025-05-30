@@ -44,7 +44,7 @@ def create_config(loc):
                             'height': '',
                             'width': ''
                             }
-    config['multiprocessing'] = {'cores': 1}
+    config['multiprocessing'] = {'cores': '1'}
 
     config['review'] = {'sleepstart': '3',
                         'sleepfinish': '7',

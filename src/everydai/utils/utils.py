@@ -1,16 +1,17 @@
 import copy
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
-import argparse
 from pathlib import Path
+import re
+from typing import Iterable
 
 import cv2
 import dlib  # Facial recognition
 import numpy as np
 
 
-def initdetectors():
+def init_face_detectors():
     # Load the detector
     detector = dlib.get_frontal_face_detector()
 
@@ -19,20 +20,26 @@ def initdetectors():
     return detector, predictor
 
 
-def find_face(img, detector, predictor):
+def detect_face(img, detector=None, predictor=None):
     # Taken from
     # https://towardsdatascience.com/detecting-face-features-with-python-30385aee4a8e
+
+    # Initialise the detector and predictor
+    if detector is None or predictor is None:
+        detector, predictor = init_face_detectors()
+
     gray = cv2.cvtColor(src=img, code=cv2.COLOR_BGR2GRAY)
 
     # Use detector to find landmarks
     faces = detector(gray)
 
-    # If no face was found, return None
-    if len(faces) == 0:
-        return None
+    # TODO: If no face was found, raise error
+    # if len(faces) == 0:
+    #     return None
+
     # Initialise with assumption that there is only one face
     goodfaceid = 0
-    # Failsafe if multiple faces were found - choose the biggest face
+    # Failsafe if multiple faces were found - choose the largest face
     if len(faces) > 1:
         maxdist = 0.0
         for i, face in enumerate(faces):
@@ -42,7 +49,8 @@ def find_face(img, detector, predictor):
             if dist > maxdist:
                 maxdist = dist
                 goodfaceid = i
-    # Save points from the biggest face
+
+    # Save points from the selected face
     landmarks = predictor(image=gray, box=faces[goodfaceid])
     points = np.ones((68, 2))
     for n in range(0, 68):
@@ -144,9 +152,9 @@ def distance(x, y, x1, y1):
     return np.sqrt((x - x1) ** 2 + (y - y1) ** 2)
 
 
-def offset_scale(points, dim, params):
+def landmark_transform(points, dim, params):
     """
-    Offset the image according to given parameters.
+    Transform the landmark points according to given parameters.
     The parameters are - x and y offsets, scale and rotation.
 
     Other possible parameters could include (I will not implement these):
@@ -207,7 +215,7 @@ def calc_angle(vectors):
 
 def costfunction(params, points, template_points, dim):
     # Convert points to scales
-    scaled_f = offset_scale(points, dim, params)
+    scaled_f = landmark_transform(points, dim, params)
     # Calculate distance from points
     cost = np.sum(
         distance(scaled_f[:, 0], scaled_f[:, 1],
@@ -275,8 +283,8 @@ def image_add_date(img, text, fontcolor=(0, 255, 0)):
     # https://stackoverflow.com/questions/16615662/how-to-write-text-on-a-image-in-windows-using-python-opencv2
     font = cv2.FONT_HERSHEY_SIMPLEX
     ylength, xlength = img.shape[:2]  # y,x
-    # position = (int(xlength * 0.75), int(ylength * 0.97))
-    position = (int(xlength * 0.65), int(ylength * 0.97))
+    position = (int(xlength * 0.75), int(ylength * 0.97))
+    # position = (int(xlength * 0.65), int(ylength * 0.97))
     # fontscale and linetype have been meticulously tested for these values
     fontscale = xlength / 10e2
     linetype = math.ceil((xlength / 10e2) * 2.5)
@@ -284,49 +292,143 @@ def image_add_date(img, text, fontcolor=(0, 255, 0)):
     return img
 
 
-def fname_to_date(fnames, dateformat="%Y-%m-%d_%H.%M.%S"):
+def fname_to_date(fnames: Iterable[Path], dateformat="%Y-%m-%d_%H.%M.%S") -> np.ndarray:
     dates = []
     for fname in fnames:
-        date = Path(fname).stem
-        print(date)
-        dates.append(datetime.strptime(date, dateformat))
+        # fname is already a Path object
+        stem = fname.stem
+        # Remove any suffix like _review, _test, etc.
+        cleaned_stem = re.sub(r'_[a-zA-Z]+$', '', stem)
+        try:
+            date = datetime.strptime(cleaned_stem, dateformat)
+            dates.append(date)
+        except ValueError as e:
+            raise ValueError(
+                f"Failed to parse date from filename '{fname}' using format '{dateformat}'."
+            ) from e
     return np.array(dates)
 
 
-def readconfig(fname, reformat=None):
-    # Old one - delete once all files are fixed
-    # align
-    # purge
-    # rename_photos
-    # review
-    # template_maker
-    with open(fname) as configfile:
-        config = {}
-        lines = filter(None,
-                       (line.rstrip().replace(" ", "") for line in configfile))
-        for line in lines:
-            if not line.startswith("#"):
-                argname, argvalue = line.split("=")
-                config[argname] = argvalue
-                if config[argname] == "None":
-                    config[argname] = None
-                # Predefined modifications
-                if reformat is not None:
-                    # Change to int
-                    if "int" in list(reformat.keys()):
-                        if argname in reformat["int"] and config[argname] is not None:
-                            config[argname] = int(config[argname])
-                    # Change to bool
-                    if "bool" in list(reformat.keys()):
-                        if argname in reformat["bool"] and config[argname] is not None:
-                            config[argname] = str2bool(config[argname])
-                    # Add slash to directories if missing
-                    if "addslash" in list(reformat.keys()):
-                        if (
-                            argname in reformat["addslash"]
-                            and config[argname] is not None
-                        ):
-                            config[argname] = config[argname].replace("\\", "/")
-                            if config[argname][-1] != "/":
-                                config[argname] += "/"
-    return config
+def rotate_image(img, angle):
+    # Taken from https://www.pyimagesearch.com/2021/01/20/opencv-rotate-image/
+    # grab the dimensions of the image and calculate the center of the
+    # image
+    (h, w) = img.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+    # rotate our image by 45 degrees around the center of the image
+    M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
+    img = cv2.warpAffine(img, M, (w, h))
+    return img
+
+
+def translate_image(img, xoff: float, yoff: float):
+    # Taken from
+    # https://stackoverflow.com/questions/54274185/
+    # shifting-an-image-by-x-pixels-to-left-while-maintaining-the-original-shape
+    # Grab the dimensions of the image
+    (h, w) = img.shape[:2]
+
+    # Image translation
+    translation_matrix = np.array([[1, 0, xoff], [0, 1, yoff]], dtype=np.float32)
+    img = cv2.warpAffine(img, translation_matrix, (w, h))
+    return img
+
+
+def create_dir(dirname: str, parent_dir: str = "./") -> None:
+    """
+    Creates a directory at parent_dir/dirname if it does not already exist.
+
+    Parameters:
+    -----------
+    dirname : str
+        Name of the directory to create.
+    parent_dir : str, optional
+        Path to the parent directory (default is current directory).
+
+    Returns:
+    --------
+    None
+    """
+    path = Path(parent_dir) / dirname
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def dir_slash(dirs):
+    for k in dirs.keys():
+        dirs[k] = os.path.join(os.path.normpath(dirs[k]), "").replace(os.sep, "/")
+    return dirs
+
+
+def read_image(fname):
+    """Read image and convert to RGB"""
+    img = cv2.imread(str(fname))
+    if img is None:
+        raise FileNotFoundError(f"Image {fname} not found.")
+    return img
+
+
+def write_image(fname, img):
+    """Write image to file"""
+    cv2.imwrite(str(fname), img)
+
+
+def image_finder(config_main, directory, sleepstart=0):
+    """
+    Finds all images in the specified directory and filters them by date.
+    Returns both filenames and dates of the images.
+    """
+    # Find all images in the directory
+    # TODO Path has its own glob generator, use that
+    directory_path = Path(directory)
+    fnames = list(directory_path.glob(f"*{config_main['extension']}"))
+
+    # Cull by date
+    datemask = np.ones(len(fnames), dtype=bool)
+    dates = fname_to_date(fnames)
+    if config_main['datestart'] != '':
+        try:
+            datestart = datetime.strptime(config_main['datestart'], '%Y-%m-%d') + timedelta(hours=sleepstart)
+        except ValueError:
+            print("TODO: better errors. This one failed when converting a date.")
+            raise
+        datemask = datemask & (dates > datestart)
+    if config_main['datefinish'] != '':
+        try:
+            datefinish = datetime.strptime(config_main['datefinish'], '%Y-%m-%d'
+                                           ) + timedelta(days=1) + timedelta(hours=sleepstart)
+        except ValueError:
+            print("TODO: better errors. This one failed when converting a date.")
+            raise
+        datemask = datemask & (dates < datefinish)
+
+    # Choose picture names by date if we need to
+    if not all(datemask):
+        fnames = [fnames[i] for i in np.where(datemask)[0]]
+        dates = [dates[i] for i in np.where(datemask)[0]]
+
+    # In the case of no images found
+    if len(fnames) == 0:
+        raise FileNotFoundError(
+            f"No images found in {directory} "
+            f"with extension {config_main['extension']}. "
+            "Try changing your selected date range."
+        )
+    # TODO: np.array is redundant once the above todos are fixed
+    return fnames, np.array(dates)
+
+
+def daily_dates(fnames, sleepstart=0):
+    """
+    Turn image file names into strings
+    of dates compliant with the solution
+    files format.
+    """
+    dates = fname_to_date(fnames)
+    for i, date in enumerate(dates):
+        # If time the photo was taken is before
+        # designated sleep time, subtract a day.
+        if date.hour < sleepstart:
+            date -= timedelta(days=1)
+        # TODO: fix this FIRST
+        dates[i] = date.strftime('%Y-%m-%d')
+    return np.array(dates)
