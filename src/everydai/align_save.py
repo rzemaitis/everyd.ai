@@ -211,11 +211,9 @@ def parse_args():
         description='Use align.py to either create aligning solutions or '
                     'aligned images with premade solutions.'
         )
+    # TODO: actually use the arguments
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite already existing solutions or images.')
-
-    parser.add_argument('--create_images', action='store_true',
-                        help='Create images with the solutions found.')
     return parser.parse_args()
 
 
