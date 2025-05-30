@@ -1,89 +1,87 @@
-import glob
-import os
-import sys
 from datetime import datetime, timedelta
+import shutil
+from pathlib import Path
 
 import numpy as np
 
 import src.everydai.utils.utils as util
+import src.everydai.utils.utils_config as util_config
 
 
-def main(imgdir, reviewdir, purgedir, datestart, datefinish, sleepstart=0, sleepfinish=0, extension='.jpg'):
-    if sleepstart is None:
-        sleepstart = 0
-    if sleepfinish is None:
-        sleepfinish = 0
-    # Initialise dates and edit them according to sleep time
-    datestart = datetime.strptime(datestart, '%Y-%m-%d').replace(hour=sleepfinish)
-    datefinish = datetime.strptime(datefinish, '%Y-%m-%d').replace(hour=sleepfinish) + timedelta(days=1)
-    if datefinish < datestart:
-        print('ERROR: end date (datefinish) is earlier than the start date (datestart).')
-        sys.exit()
-    # Find all files within the given date range in the original directory
-    dates_base, fnamelist_base = [], []
-    fnames = glob.glob(imgdir + '*' + extension)
-    if len(fnames) == 0:
-        sys.exit('No images found in' + imgdir + ' with extension ' + extension)
-    for fname in fnames:
-        fname = fname.replace('\\', '/')
-        date = fname.split('/')[-1].rstrip(extension)
-        date = datetime.strptime(date, "%Y-%m-%d_%H.%M.%S")
-        if datefinish > date > datestart:
-            dates_base.append(date)
-            fnamelist_base.append(fname)
+class Purger:
 
-    # Find all dates within the given date range in the review directory
-    dates_review, fnamelist_review = [], []
-    fnames = glob.glob(reviewdir + '*' + extension)
-    for fname in fnames:
-        fname = fname.replace('\\', '/')
-        date = fname.split('/')[-1].rstrip('_review' + extension)
-        date = datetime.strptime(date, "%Y-%m-%d_%H.%M.%S")
-        if datefinish > date > datestart:
-            dates_review.append(date)
-            fnamelist_review.append(fname)
-    dates_base, dates_review = np.array(dates_base), np.array(dates_review)
+    def __init__(self):
+        config = util_config.read_config('./config.txt')
+        self.config_main = config['main']
+        self.config_dir = util.dir_slash(config['directories'])
+        self.config_review = config['review']
 
-    # Initialise parameters
-    days = (datefinish - datestart).days
-    # Construct dates running from the start date
-    testdate1 = datestart.replace(hour=sleepfinish)
-    testdate2 = datestart.replace(hour=sleepfinish) + timedelta(days=1)
-    for i in range(days):
-        # Check if there's only one photo left for this day in the review directory
-        reviewcheck = dates_review[np.logical_and(dates_review > testdate1, dates_review < testdate2)]
-        if reviewcheck.size > 1:
-            print('Photos from', testdate1.strftime("%Y-%m-%d_%H.%M.%S"), 'to', testdate2.strftime("%Y-%m-%d_%H.%M.%S"),
-                  'still need reviewing.')
+        self.fnames_main, self.dates_main = util.image_finder(config['main'], self.config_dir['imgdir'])
+        _, self.dates_review = util.image_finder(config['main'], self.config_dir['reviewdir'])
+
+    def run(self):
+        # Call the main function with the instance variables
+        self.purge()
+
+    def purge(self):
+
+        # TODO: validate config values
+        # if datefinish < datestart:
+        #     print('ERROR: end date (datefinish) is earlier than the start date (datestart).')
+        #     sys.exit()
+
+        # Initialise parameters
+        datestart = datetime.strptime(self.config_main['datestart'], '%Y-%m-%d')
+        datefinish = datetime.strptime(self.config_main['datefinish'], '%Y-%m-%d')
+        days = (datefinish-datestart).days
+        # Construct dates running from the start date
+        testdate1 = datestart.replace(hour=int(self.config_review["sleepstart"]))
+        testdate2 = datestart.replace(hour=int(self.config_review["sleepfinish"])) + timedelta(days=1)
+        for i in range(days):
+            # Find all images taken on that day
+            imgdates = self.dates_main[np.logical_and(self.dates_main > testdate1, self.dates_main < testdate2)]
+            # Check if there's only one photo left for this day in the review directory
+            reviewcheck = self.dates_review[(self.dates_review > testdate1) & (self.dates_review < testdate2)]
+            if reviewcheck.size != 1:
+                if imgdates.size == 1 and reviewcheck.size != 0:
+                    # Extra clause - already reviewed and purged, but some review photos remain
+                    print(f"Photos from {testdate1.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " to {testdate2.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " are already reviewed, but review photos remain. Please remove them manually.")
+                elif reviewcheck.size > 1:
+                    print(f"Photos from {testdate1.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " to {testdate2.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " still need reviewing.")
+                elif reviewcheck.size == 0 and imgdates.size > 1:
+                    print(f"No photos left from {testdate1.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " to {testdate2.strftime('%Y-%m-%d_%H.%M.%S')}"
+                          " in the review directory, but the day still needs reviewing.")
+                testdate1 += timedelta(days=1)
+                testdate2 += timedelta(days=1)
+                continue
+
+            # Purge image photos ONLY IF there's more than one on that day
+            if imgdates.size > 1:
+                for imgdate in imgdates:
+                    index = np.argwhere(self.dates_main == imgdate)[0][0]
+                    fname = self.fnames_main[index]
+                    sname = Path(self.config_dir["purgedir"]) / fname.name
+                    if imgdate not in self.dates_review:
+                        print('Purging ' + fname.name)
+                        shutil.move(fname, sname)
+                        pass
+                    else:
+                        rname = Path(self.config_dir["reviewdir"]) / (fname.stem +
+                                                                      '_review' + self.config_main["extension"])
+                        deletname = Path("delet_review") / rname.name  # TEMPORARY
+                    #     os.remove(rname)
+                        shutil.move(rname, deletname)  # TEMPORARY
             testdate1 += timedelta(days=1)
             testdate2 += timedelta(days=1)
-            continue
-        # Find suitable days
-        gooddates = dates_base[np.logical_and(dates_base > testdate1, dates_base < testdate2)]
-        # Purge photos ONLY IF there's more than one on that day
-
-        if gooddates.size > 1:
-            for gooddate in gooddates:
-                index = np.argwhere(dates_base == gooddate)[0][0]
-                fname = fnamelist_base[index]
-                sname = purgedir + fname.split('/')[-1]
-                if gooddate not in dates_review:
-                    print('Purging ' + fname.split('/')[-1])
-                    os.rename(fname, sname)
-                else:
-                    rname = reviewdir + fname.split('/')[-1].rpartition('.')[0]+'_review'+extension
-                    os.remove(rname)
-        testdate1 += timedelta(days=1)
-        testdate2 += timedelta(days=1)
-    print('Purging completed successfully!')
+        print('Purging completed successfully!')
 
 
 if __name__ == "__main__":
-    # Modifications to config formats
-    reformat = {}
-    reformat['int'] = ['sleepstart', 'sleepfinish']
-    reformat['addslash'] = ['imgdir', 'reviewdir', 'purgedir']
-    # Read in config file
-    config = util.readconfig('./config/purge_config.txt', reformat=reformat)
-
-    main(**config)
+    # Create a Purger instance and run the review process
+    reviewer = Purger()
+    reviewer.run()
