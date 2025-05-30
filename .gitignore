@@ -2,7 +2,6 @@
 .*
 
 # Environments
-venv*
 .vscode
 .idea
 
@@ -17,3 +16,9 @@ venv*
 salvageFormat_mine.py
 shape_predictor_68_face_landmarks.dat
 fun_*
+config.txt
+Images
+Movie
+Purged
+Review
+Solutions
