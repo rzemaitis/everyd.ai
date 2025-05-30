@@ -1,39 +1,60 @@
-import glob, os, sys
-from PIL import Image, ExifTags
 from datetime import datetime
-import utilities as util
+from pathlib import Path
 
-def main(imgdir,extension='.jpg'):
-    errorlog = open(imgdir + 'errors_renamePhotos.txt', "w")
-    fnames = glob.glob(imgdir + '*'+extension)
-    if len(fnames) == 0:
-        sys.exit('No images found in ' + imgdir + ' with extension ' + extension)
-    for fname in fnames:
+from PIL import Image, ExifTags
 
-        with Image.open(fname) as img:
-            # Taken from https://stackoverflow.com/questions/21697645/how-to-extract-metadata-from-a-image-using-python
+import src.everydai.utils.utils_config as util_config
+
+
+class Renamer:
+
+    def __init__(self):
+        config = util_config.read_config('./config.txt')
+        self.config_main = config['main']
+        self.config_dir = config['directories']
+
+    def image_finder(self):
+        """
+        Find all images with the given extension.
+        This is custom made for the Renamer class.
+        """
+        path = Path(self.config_dir["imgdir"])
+        fnames = list(path.glob(f"*{self.config_main['extension']}"))
+
+        if len(fnames) == 0:
+            raise FileNotFoundError(
+                f"No images found in {self.config_dir['imgdir']} "
+                f"with extension {self.config_main['extension']}. "
+            )
+        return fnames
+
+    def rename(self):
+        fnames = self.image_finder()
+        for fname in fnames:
+            with Image.open(fname) as img:
+                # Taken from https://stackoverflow.com/questions/21697645/
+                # how-to-extract-metadata-from-a-image-using-python
+                try:
+                    exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
+                except AttributeError:
+                    print(f"Problem with {fname.name}. No EXIF data.")
+                    continue
             try:
-                exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
-            except:
-                print('Problem with '+fname.split('/')[-1]+'. No EXIF data.')
-                errorlog.write(fname.split('/')[-1]+' no EXIF data')
+                date = datetime.strptime(exif['DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
+            except ValueError:
+                print(f"Problem with {fname.name}. Bad date format.")
                 continue
+            newfname = Path(self.config_dir['imgdir']) / (f"{date.strftime('%Y-%m-%d_%H.%M.%S')}"
+                                                          f"{self.config_main['extension']}")
         try:
-            date = datetime.strptime(exif['DateTime'], '%Y:%m:%d %H:%M:%S')
-        except:
-            print('Problem with ' + fname.split('/')[-1] + '. Bad date format.')
-            errorlog.write(fname.split('/')[-1]+' bad EXIF date format')
-            continue
-        newfname=imgdir+date.strftime("%Y-%m-%d_%H.%M.%S")+extension
-        os.rename(fname,newfname)
-    errorlog.close()
-    print('Photos renamed successfully!')
+            Path(fname).rename(newfname)
+        except FileExistsError:
+            print(f"File {newfname.name} already exists. Duplicate or photo taken at the same second.")
+        except OSError as e:
+            print(f"Problem renaming {Path(fname).name}: {e}")
+        print('Photos renamed successfully!')
+
 
 if __name__ == "__main__":
-    # Modifications to config formats
-    reformat = {}
-    reformat['addslash'] = ['imgdir']
-    #Read in config file
-    config =  util.readConfig('./config/renamePhotos_config.txt',reformat=reformat)
-
-    main(**config)
+    renamer = Renamer()
+    renamer.rename()
