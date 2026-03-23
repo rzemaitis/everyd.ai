@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 import numpy as np
 from pathlib import Path
 
-import src.everydai.utils.utils as util
-import src.everydai.utils.utils_config as util_config
+import everydai.utils.utils as util
+import everydai.utils.utils_config as util_config
 
 
 class Reviewer:
@@ -96,7 +96,7 @@ class Reviewer:
                   f" to {(datefinish - timedelta(days=1)).strftime('%Y-%m-%d')}.")
         else:
             print(f"{needsreview} days need reviewing from {datestart.strftime('%Y-%m-%d')}"
-                  f"to{(datefinish - timedelta(days=1)).strftime('%Y-%m-%d')}.")
+                  f" to {(datefinish - timedelta(days=1)).strftime('%Y-%m-%d')}.")
         print('Review photos created successfully!')
 
 

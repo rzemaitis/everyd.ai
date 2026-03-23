@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import sys
 
-import src.everydai.utils.utils as util
+import everydai.utils.utils as util
 
 # TODO: I think the template rescaling should be done on a picture-by-picture basis, after all,
 # we're not saving pictures here, just the dimensions?

@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta
+import os
 import shutil
 from pathlib import Path
 
 import numpy as np
 
-import src.everydai.utils.utils as util
-import src.everydai.utils.utils_config as util_config
+import everydai.utils.utils as util
+import everydai.utils.utils_config as util_config
 
+# TODO: config option for safe mode?
+purge_mode = "move"
 
 class Purger:
 
@@ -73,9 +76,14 @@ class Purger:
                     else:
                         rname = Path(self.config_dir["reviewdir"]) / (fname.stem +
                                                                       '_review' + self.config_main["extension"])
-                        deletname = Path("delet_review") / rname.name  # TEMPORARY
-                    #     os.remove(rname)
-                        shutil.move(rname, deletname)  # TEMPORARY
+                        if purge_mode == "move":
+                            # TODO more appropriate config for moving directory
+                            deletname = Path("delet_review") / rname.name
+                            shutil.move(rname, deletname)
+                        elif purge_mode == "delete":
+                            os.remove(rname)
+                        # TODO no else - just check at config that purge_mode is either move or delete
+                        # TODO validate config?
             testdate1 += timedelta(days=1)
             testdate2 += timedelta(days=1)
         print('Purging completed successfully!')

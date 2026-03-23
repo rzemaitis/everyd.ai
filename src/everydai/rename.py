@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PIL import Image, ExifTags
 
-import src.everydai.utils.utils_config as util_config
+import everydai.utils.utils_config as util_config
 
 
 class Renamer:
