@@ -53,7 +53,7 @@ class Aligner:
         """
         img_template = util.read_image(fname)
         self.dim_template = img_template.shape[:2]
-        self.points_template = util.detect_face(img_template, *self.face_detectors)
+        self.points_template = util.detect_face(img_template, self.face_detectors)
         # Failsafe if no faces were found
         # TODO: raise an error?
         # if self.points is None:
@@ -73,7 +73,7 @@ class Aligner:
         img = util.rescale(img, self.dim_template)
         self.dim = img.shape[:2]
 
-        self.points = util.detect_face(img, *self.face_detectors)
+        self.points = util.detect_face(img, self.face_detectors)
 
     # def nose_rotate(self, img):
     #     # TODO: make a nose vector, rotate the image to make the vector angle zero.
@@ -108,15 +108,15 @@ class Aligner:
         # TODO: the nose might potentially solve this issue, if the eyes don't.
         # Step 1: Fit eyes first - they eyes start from 36 to the end of the array
         res = minimize(util.costfunction, self.default_guess,
-                       args=(self.points[36:48], self.points_template[36:48], self.dim),
+                       args=(util.eye_points(self.points), util.eye_points(self.points_template), self.dim),
                        bounds=self.default_bounds)
         guess = res.x
-        # Step 2: Include the whole face
-        scale = 0.2
-        refined_bounds = [(x * scale, y * scale) for (x, y) in self.default_bounds]
-        res = minimize(util.costfunction, guess,
-                       args=(self.points, self.points_template, self.dim), bounds=refined_bounds)
-        guess = res.x
+        # # Step 2: Include the whole face
+        # scale = 0.2
+        # refined_bounds = [(x * scale, y * scale) for (x, y) in self.default_bounds]
+        # res = minimize(util.costfunction, guess,
+        #                args=(self.points, self.points_template, self.dim), bounds=refined_bounds)
+        # guess = res.x
         return guess
 
     def align(self, fname, date, solnsdir='./Solutions', sleepstart=0):

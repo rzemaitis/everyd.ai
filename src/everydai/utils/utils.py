@@ -8,10 +8,11 @@ from typing import Iterable
 
 import cv2
 import dlib  # Facial recognition
+import mediapipe as mp
 import numpy as np
 
 
-def init_face_detectors():
+def init_face_detectors_legacy():
     # Load the detector
     detector = dlib.get_frontal_face_detector()
 
@@ -19,16 +20,97 @@ def init_face_detectors():
     predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
     return detector, predictor
 
+def init_face_detectors():
+    # Initialize MediaPipe once outside the function for efficiency
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
+    return face_mesh
 
-def detect_face(img, detector=None, predictor=None):
+def detect_face(img, face_mesh=None):
+    """
+    Detect face landmarks using MediaPipe Face Mesh.
+
+    Args:
+        img (np.array): BGR image (as read by cv2.imread)
+
+    Returns:
+        points (np.array): Array of shape (468, 2) with (x, y) pixel coordinates of landmarks.
+
+    Raises:
+        ValueError: if no face is detected.
+    """
+
+    if face_mesh is None:
+        mp_face_mesh = mp.solutions.face_mesh
+        face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
+
+    height, width, _ = img.shape
+    rgb_image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    results = face_mesh.process(rgb_image)
+
+    if not results.multi_face_landmarks:
+        raise ValueError("No face detected")
+
+    # If multiple faces, select the largest by bounding box area
+    if len(results.multi_face_landmarks) > 1:
+        max_area = 0
+        selected_landmarks = None
+
+        for face_landmarks in results.multi_face_landmarks:
+            # Extract bounding box from landmarks
+            xs = [lm.x for lm in face_landmarks.landmark]
+            ys = [lm.y for lm in face_landmarks.landmark]
+            x_min, x_max = min(xs), max(xs)
+            y_min, y_max = min(ys), max(ys)
+
+            # Compute bounding box area in normalized coords
+            area = (x_max - x_min) * (y_max - y_min)
+
+            if area > max_area:
+                max_area = area
+                selected_landmarks = face_landmarks
+    else:
+        selected_landmarks = results.multi_face_landmarks[0]
+
+    # Convert normalized landmarks to pixel coordinates
+    points = np.zeros((468, 2))
+    for i, lm in enumerate(selected_landmarks.landmark):
+        x, y = lm.x * width, lm.y * height
+        points[i] = [x, y]
+
+    return points
+
+def eye_points(points):
+    """
+    Extract eye landmarks from the full MediaPipe 468 landmarks.
+
+    Args:
+        points (np.array): Array of shape (468, 2) with (x, y) coordinates.
+
+    Returns:
+        points_eyes (np.array): Array of shape (N, 2) with all eye landmarks combined.
+    """
+    # MediaPipe eye landmark indices (left + right)
+    eye_indices = [
+        33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,  # Left eye
+        263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466  # Right eye
+    ]
+    
+    points_eyes = points[eye_indices, :]
+    return points_eyes
+
+
+def detect_face_legacy(img, detector=None, predictor=None):
     # Taken from
     # https://towardsdatascience.com/detecting-face-features-with-python-30385aee4a8e
-
     # Initialise the detector and predictor
     if detector is None or predictor is None:
         detector, predictor = init_face_detectors()
 
+
     gray = cv2.cvtColor(src=img, code=cv2.COLOR_BGR2GRAY)
+
 
     # Use detector to find landmarks
     faces = detector(gray)
@@ -257,7 +339,7 @@ def cv2_clipped_zoom(img, zoom_factor):
     y2, x2 = y1 + h, x1 + w
     bbox = np.array([y1, x1, y2, x2])
     # Map back to original image coordinates
-    bbox = (bbox / zoom_factor).astype(np.int)
+    bbox = (bbox / zoom_factor).astype(int)
     y1, x1, y2, x2 = bbox
     cropped_img = img[y1:y2, x1:x2]
 
@@ -429,6 +511,5 @@ def daily_dates(fnames, sleepstart=0):
         # designated sleep time, subtract a day.
         if date.hour < sleepstart:
             date -= timedelta(days=1)
-        # TODO: fix this FIRST
         dates[i] = date.strftime('%Y-%m-%d')
     return np.array(dates)
